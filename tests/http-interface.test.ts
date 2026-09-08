@@ -27,10 +27,18 @@ async function testDataDir(): Promise<string> {
 
 describe("interface locale", () => {
   it("sert l'interface, l'état et protège les mutations par CSRF", async () => {
-    const config = loadConfig({ adapter: "fake", port: 37_421, host: "127.0.0.1", dataDir: await testDataDir() });
+    const config = loadConfig({
+      adapter: "fake",
+      port: 37_421,
+      host: "127.0.0.1",
+      allowedHosts: ["127.0.0.1", "localhost", "[::1]", "100.64.0.1"],
+      dataDir: await testDataDir(),
+    });
     const runtime = await createRuntime(config, { connector: new FakePronoteConnector() });
     const app = createHttpApp(runtime);
     await request(app).get("/").set("Host", "127.0.0.1").expect(200).expect(/PronoteConnect/u);
+    await request(app).get("/health").set("Host", "100.64.0.1:37421").expect(200);
+    await request(app).get("/health").set("Host", "192.168.1.20:37421").expect(403);
     await request(app).get("/api/status").set("Host", "127.0.0.1").expect(200).expect((response) => {
       expect(response.body.connection.connected).toBe(true);
       expect(response.body.mcp.active).toBe(true);

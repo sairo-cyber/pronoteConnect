@@ -44,6 +44,14 @@ Dans une nouvelle conversation ChatGPT, activez le plugin PronoteConnect puis de
 
 Le même plugin personnel fonctionne sur les surfaces ChatGPT web et mobile prises en charge. Le PC doit rester allumé et connecté à Internet. Même sur ce PC, ChatGPT passe par le Secure MCP Tunnel ; aucun port entrant n'est ouvert.
 
+Pour ouvrir uniquement l'interface de configuration depuis un appareil du même tailnet, activez un relais privé Tailscale sur le PC :
+
+```bash
+sudo tailscale serve --bg --yes --tcp=37421 tcp://127.0.0.1:37421
+```
+
+L'adresse à ouvrir est `http://<adresse-tailscale-du-pc>:37421`. Obtenez cette adresse avec `tailscale ip -4`. Cette option n'utilise pas Tailscale Funnel et ne rend pas l'interface publique.
+
 ## Ce qui tourne sur le PC
 
 - le service PronoteConnect expose huit outils MCP strictement en lecture seule ;

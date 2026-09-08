@@ -9,6 +9,7 @@ export const MAX_RETURNED_TEXT_CHARS = 60_000;
 
 export interface AppConfig {
   host: string;
+  allowedHosts: string[];
   port: number;
   dataDir: string;
   installDir: string;
@@ -22,9 +23,13 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   const configuredPort = Number(process.env.PRONOTECONNECT_PORT ?? DEFAULT_PORT);
   const adapter = process.env.PRONOTECONNECT_ADAPTER === "fake" ? "fake" : "real";
   const installDir = resolve(process.env.PRONOTECONNECT_INSTALL_DIR ?? process.cwd());
+  const allowedHosts = ["127.0.0.1", "localhost", "[::1]", ...(process.env.PRONOTECONNECT_ALLOWED_HOSTS ?? "").split(",")]
+    .map((host) => host.trim().toLowerCase())
+    .filter((host, index, hosts) => host.length > 0 && hosts.indexOf(host) === index);
 
   const base: AppConfig = {
     host: process.env.PRONOTECONNECT_HOST ?? "127.0.0.1",
+    allowedHosts,
     port: Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : DEFAULT_PORT,
     dataDir: resolve(process.env.PRONOTECONNECT_DATA_DIR ?? join(installDir, ".data")),
     installDir,

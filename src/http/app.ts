@@ -51,7 +51,7 @@ function safeApiMessage(error: unknown): { error: string; message: string } {
 }
 
 export function createHttpApp(runtime: Runtime) {
-  const app = createMcpExpressApp({ host: runtime.config.host });
+  const app = createMcpExpressApp({ host: runtime.config.host, allowedHosts: runtime.config.allowedHosts });
   const csrf = randomBytes(32).toString("base64url");
   app.disable("x-powered-by");
   app.use((_request, response, next) => {
