@@ -1,5 +1,5 @@
 const { spawn, spawnSync } = require("node:child_process");
-const { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } = require("node:fs");
 const http = require("node:http");
 const { join, resolve } = require("node:path");
 
@@ -99,26 +99,21 @@ async function start() {
   prepareLog();
   const host = tailscaleHost();
   const logHandle = openSync(logFile, "a");
-  let child;
-  try {
-    child = spawn(process.execPath, [serverEntry], {
-      cwd: root,
-      detached: true,
-      windowsHide: true,
-      stdio: ["ignore", logHandle, logHandle],
-      env: {
-        ...process.env,
-        PRONOTECONNECT_DATA_DIR: dataDir,
-        PRONOTECONNECT_INSTALL_DIR: root,
-        PRONOTECONNECT_TUNNEL_CLIENT: tunnelClient,
-        PRONOTECONNECT_MANAGED_SERVICE: "1",
-        PLAYWRIGHT_BROWSERS_PATH: join(root, ".runtime", "browsers"),
-        ...(host ? { PRONOTECONNECT_TAILSCALE_HOST: host } : {}),
-      },
-    });
-  } finally {
-    closeSync(logHandle);
-  }
+  const child = spawn(process.execPath, [serverEntry], {
+    cwd: root,
+    detached: true,
+    windowsHide: true,
+    stdio: ["ignore", logHandle, logHandle],
+    env: {
+      ...process.env,
+      PRONOTECONNECT_DATA_DIR: dataDir,
+      PRONOTECONNECT_INSTALL_DIR: root,
+      PRONOTECONNECT_TUNNEL_CLIENT: tunnelClient,
+      PRONOTECONNECT_MANAGED_SERVICE: "1",
+      PLAYWRIGHT_BROWSERS_PATH: join(root, ".runtime", "browsers"),
+      ...(host ? { PRONOTECONNECT_TAILSCALE_HOST: host } : {}),
+    },
+  });
   closeSync(logHandle);
   writeFileSync(pidFile, `${child.pid}\n`, { encoding: "utf8" });
   child.unref();
