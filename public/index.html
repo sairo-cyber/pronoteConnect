@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>PronoteConnect</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="brand-mark" aria-hidden="true">PC</div>
+      <div class="hero__copy">
+        <p class="eyebrow">configuration locale</p>
+        <h1>PronoteConnect</h1>
+        <p>Reliez votre compte PRONOTE à ChatGPT sans publier votre serveur ni transmettre votre mot de passe.</p>
+      </div>
+      <span id="global-status" class="pill">vérification</span>
+    </header>
+
+    <main>
+      <div id="notice" class="notice hidden" role="status"></div>
+
+      <section class="card summary" aria-labelledby="summary-title">
+        <div class="card-title">
+          <div><p class="eyebrow">état général</p><h2 id="summary-title">Votre installation</h2></div>
+          <button id="refresh-status" class="button button-quiet" type="button">actualiser</button>
+        </div>
+        <div class="status-grid">
+          <article><span id="service-dot" class="dot"></span><div><strong>service</strong><p id="service-state">chargement</p></div></article>
+          <article><span id="tunnel-dot" class="dot"></span><div><strong>tunnel privé</strong><p id="tunnel-state">chargement</p></div></article>
+          <article><span id="plugin-dot" class="dot"></span><div><strong>plugin ChatGPT</strong><p id="plugin-state">chargement</p></div></article>
+          <article><span id="pronote-dot" class="dot"></span><div><strong>PRONOTE</strong><p id="pronote-state">chargement</p></div></article>
+        </div>
+      </section>
+
+      <ol class="steps" aria-label="progression de la configuration">
+        <li id="step-marker-1"><span>1</span>application</li>
+        <li id="step-marker-2"><span>2</span>tunnel</li>
+        <li id="step-marker-3"><span>3</span>plugin</li>
+        <li id="step-marker-4"><span>4</span>pronote</li>
+      </ol>
+
+      <section class="card setup-card" aria-labelledby="install-title">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <div class="card-title"><div><p class="eyebrow">application</p><h2 id="install-title">Vérifier l’installation</h2></div><span id="install-badge" class="badge">chargement</span></div>
+          <p>Tout le programme reste dans le dossier que vous avez choisi. Le service continue de fonctionner après la fermeture de cette page.</p>
+          <dl class="facts">
+            <div><dt>dossier</dt><dd id="install-path">—</dd></div>
+            <div><dt>navigateur</dt><dd id="browser-state">—</dd></div>
+            <div><dt>démarrage automatique</dt><dd id="autostart-state">—</dd></div>
+            <div><dt>version</dt><dd id="app-version">—</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card setup-card" aria-labelledby="tunnel-title">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <div class="card-title"><div><p class="eyebrow">openai platform</p><h2 id="tunnel-title">Créer le tunnel privé</h2></div><span id="tunnel-badge" class="badge">à configurer</span></div>
+          <p>Le tunnel permet à ChatGPT web et mobile de joindre ce PC sans ouvrir de port public. Chaque utilisateur crée son propre tunnel privé.</p>
+          <div class="guide">
+            <div><span>1</span><p>Ouvrez les tunnels OpenAI, créez un tunnel nommé <strong>PronoteConnect</strong> et associez votre espace ChatGPT.</p><a class="button button-secondary" href="https://platform.openai.com/settings/organization/tunnels" target="_blank" rel="noopener noreferrer">ouvrir les tunnels</a></div>
+            <div><span>2</span><p>Créez une clé d’exécution limitée à <strong>Tunnels Read</strong> et <strong>Tunnels Use</strong>.</p><a class="button button-secondary" href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">ouvrir les clés</a></div>
+            <div><span>3</span><p>Collez les deux valeurs ci-dessous. Elles restent uniquement sur cet ordinateur.</p></div>
+          </div>
+          <form id="tunnel-form" class="stack-form" autocomplete="off">
+            <label class="field"><span>identifiant du tunnel</span><input id="tunnel-id" name="tunnelId" placeholder="tunnel_..." spellcheck="false" required></label>
+            <label class="field"><span>clé d’exécution OpenAI</span><input id="runtime-api-key" name="runtimeApiKey" type="password" placeholder="collez la clé ici" autocomplete="new-password" required minlength="20"></label>
+            <button class="button button-primary" type="submit">enregistrer et démarrer le tunnel</button>
+          </form>
+          <div id="tunnel-details" class="result-panel hidden">
+            <div><span>tunnel enregistré</span><code id="saved-tunnel-id">—</code></div>
+            <div class="button-row">
+              <button id="copy-tunnel" class="button button-secondary" type="button">copier l’identifiant</button>
+              <button id="restart-tunnel" class="button button-secondary" type="button">redémarrer</button>
+              <button id="forget-tunnel" class="button button-danger" type="button">oublier le tunnel</button>
+            </div>
+          </div>
+          <p id="tunnel-storage-warning" class="warning hidden"></p>
+        </div>
+      </section>
+
+      <section class="card setup-card" aria-labelledby="plugin-title">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <div class="card-title"><div><p class="eyebrow">chatgpt</p><h2 id="plugin-title">Créer votre plugin personnel</h2></div><span id="plugin-badge" class="badge">à configurer</span></div>
+          <p>Cette étape se fait dans votre navigateur. Aucune application ChatGPT ou Codex n’est nécessaire.</p>
+          <div class="plugin-values">
+            <div><span>nom</span><strong>PronoteConnect</strong><button id="copy-plugin-name" class="copy" type="button">copier</button></div>
+            <div><span>connexion</span><strong>tunnel</strong></div>
+            <div><span>authentification</span><strong>aucune authentification</strong></div>
+          </div>
+          <ol class="compact-list">
+            <li>activez le mode développeur dans les paramètres de sécurité ChatGPT ;</li>
+            <li>ouvrez la page des plugins puis choisissez « créer une application » ;</li>
+            <li>utilisez les valeurs ci-dessus, sélectionnez votre tunnel et créez le plugin ;</li>
+            <li>copiez l’adresse de la page du plugin et collez-la ci-dessous.</li>
+          </ol>
+          <div class="button-row">
+            <a class="button button-secondary" href="https://chatgpt.com/#settings/Security" target="_blank" rel="noopener noreferrer">ouvrir les paramètres</a>
+            <a class="button button-primary" href="https://chatgpt.com/plugins#settings/Connectors?create-connector=true&amp;redirectAfter=%2Fplugins" target="_blank" rel="noopener noreferrer">créer le plugin</a>
+          </div>
+          <form id="plugin-form" class="inline-form" autocomplete="off">
+            <label class="field grow"><span>adresse ou identifiant du plugin</span><input id="plugin-id" name="plugin" placeholder="https://chatgpt.com/plugins/plugin_asdk_app_..." spellcheck="false" required></label>
+            <button class="button button-primary align-end" type="submit">confirmer</button>
+          </form>
+          <div id="plugin-details" class="result-panel hidden"><div><span>plugin enregistré</span><code id="saved-plugin-id">—</code></div></div>
+        </div>
+      </section>
+
+      <section class="card setup-card" aria-labelledby="pronote-title">
+        <div class="step-number">4</div>
+        <div class="step-content">
+          <div class="card-title"><div><p class="eyebrow">compte scolaire</p><h2 id="pronote-title">Connecter PRONOTE</h2></div><span id="pronote-badge" class="badge">à connecter</span></div>
+          <div id="account-details" class="result-panel hidden">
+            <dl class="facts">
+              <div><dt>établissement</dt><dd id="school-name">—</dd></div>
+              <div><dt>classe</dt><dd id="class-name">—</dd></div>
+              <div><dt>dernière connexion</dt><dd id="last-connected">—</dd></div>
+              <div><dt>stockage</dt><dd id="storage-backend">—</dd></div>
+            </dl>
+          </div>
+          <p id="storage-warning" class="warning hidden"></p>
+
+          <div id="pronote-selector">
+            <div class="method-tabs" role="tablist" aria-label="méthode de recherche">
+              <button class="tab is-active" id="tab-search" role="tab" aria-selected="true" aria-controls="panel-search" type="button">rechercher mon lycée</button>
+              <button class="tab" id="tab-url" role="tab" aria-selected="false" aria-controls="panel-url" type="button">utiliser mon url pronote</button>
+            </div>
+            <div id="panel-search" role="tabpanel" aria-labelledby="tab-search">
+              <form id="city-form" class="inline-form">
+                <label class="field grow"><span>ville</span><input id="city-query" autocomplete="address-level2" placeholder="ex. lyon" required minlength="2"></label>
+                <button class="button button-primary align-end" type="submit">rechercher</button>
+              </form>
+              <div id="city-results" class="results" aria-live="polite"></div>
+              <div id="school-results" class="results" aria-live="polite"></div>
+            </div>
+            <div id="panel-url" class="hidden" role="tabpanel" aria-labelledby="tab-url">
+              <form id="url-form" class="inline-form">
+                <label class="field grow"><span>url fournie par le lycée</span><input id="pronote-url" inputmode="url" autocomplete="url" placeholder="https://.../pronote" required></label>
+                <button class="button button-primary align-end" type="submit">vérifier</button>
+              </form>
+            </div>
+            <div id="instance-confirmation" class="confirmation hidden">
+              <div><p class="eyebrow">instance vérifiée</p><h3 id="instance-name">—</h3><p id="instance-url">—</p><p id="instance-cas">—</p></div>
+              <button id="start-auth" class="button button-primary" type="button">se connecter avec educonnect</button>
+            </div>
+          </div>
+
+          <div id="auth-progress" class="progress-panel hidden" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>
+            <div><strong id="auth-phase">connexion en cours</strong><p id="auth-message">une fenêtre sécurisée va s’ouvrir.</p></div>
+            <button id="cancel-auth" class="button button-quiet" type="button">annuler</button>
+          </div>
+          <form id="pin-form" class="progress-panel hidden">
+            <div><strong>validation pronote</strong><p>saisissez le pin à quatre chiffres demandé pour enregistrer cet appareil.</p></div>
+            <label class="field"><span>pin pronote</span><input id="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" required></label>
+            <button class="button button-primary" type="submit">valider</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="complete-card" class="card complete-card hidden" aria-labelledby="complete-title">
+        <p class="eyebrow">configuration terminée</p>
+        <h2 id="complete-title">PronoteConnect est prêt</h2>
+        <p>Vous pouvez fermer cette page. Le service et le tunnel continueront de fonctionner en arrière-plan.</p>
+        <a class="button button-primary" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ouvrir chatgpt</a>
+      </section>
+
+      <details class="card maintenance">
+        <summary>maintenance et données locales</summary>
+        <p>Utilisez ces actions uniquement en cas de problème ou avant de désinstaller.</p>
+        <div class="button-row">
+          <button id="clear-cache" class="button button-secondary" type="button">vider le cache des documents</button>
+          <button id="disconnect" class="button button-secondary" type="button">déconnecter pronote</button>
+          <button id="delete-data" class="button button-danger" type="button">supprimer le jeton pronote</button>
+        </div>
+      </details>
+    </main>
+
+    <footer>PronoteConnect est un projet indépendant, non affilié à Index Éducation, EduConnect ou Papillon.</footer>
+  </body>
+</html>

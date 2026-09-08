@@ -1,0 +1,10 @@
+SPDX-License-Identifier: GPL-3.0-or-later
+
+PronoteConnect is licensed under the GNU General Public License,
+version 3 or (at your option) any later version.
+
+The complete license text is available at:
+https://www.gnu.org/licenses/gpl-3.0.txt
+
+This license choice is compatible with the declared GPL-3.0-or-later
+license of the @blockshub/pawnote-lts dependency used by this prototype.

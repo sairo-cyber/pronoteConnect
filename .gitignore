@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.data/
+.runtime/
+.env
+.env.*
+playwright-report/
+test-results/
+*.log

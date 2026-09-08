@@ -1,0 +1,46 @@
+{
+  "name": "pronoteconnect",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Connecteur PRONOTE auto-hébergé, local et en lecture seule pour ChatGPT.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/src/index.js",
+    "start:fake": "node scripts/start-fake.mjs",
+    "desktop": "electron desktop/main.cjs",
+    "mcp:stdio": "node dist/src/stdio.js",
+    "mcp:stdio:dev": "tsx src/stdio.ts",
+    "install:tunnel": "node scripts/install-tunnel-client.mjs",
+    "security:scan": "tsx scripts/security-scan.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run check && npm run build && npm test && npm run security:scan"
+  },
+  "dependencies": {
+    "@blockshub/pawnote-lts": "1.6.4",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "electron": "44.2.0",
+    "express": "5.2.1",
+    "fflate": "0.8.3",
+    "mammoth": "1.12.2",
+    "pdfjs-dist": "5.4.149",
+    "playwright": "1.63.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "24.3.0",
+    "@types/supertest": "6.0.3",
+    "supertest": "7.1.4",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2",
+    "vitest": "3.2.7"
+  }
+}
