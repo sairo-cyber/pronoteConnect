@@ -39,8 +39,10 @@ describe("stockage des identifiants", () => {
     await store.set(value);
     const encrypted = await readFile(join(directory, "credentials.enc"), "utf8");
     expect(encrypted).not.toContain(value.token);
-    expect((await stat(join(directory, "credentials.enc"))).mode & 0o777).toBe(0o600);
-    expect((await stat(join(directory, "fallback-master.key"))).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect((await stat(join(directory, "credentials.enc"))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(directory, "fallback-master.key"))).mode & 0o777).toBe(0o600);
+    }
     expect(await store.get()).toEqual(value);
     await store.delete();
     expect(await store.get()).toBeNull();
