@@ -7,7 +7,7 @@ export interface PublicConnectionStatus {
   className?: string;
   pronoteUrl?: string;
   lastConnectedAt?: string;
-  storageBackend: "system-keyring" | "encrypted-local-fallback" | "memory";
+  storageBackend: "system-keyring" | "windows-dpapi" | "encrypted-local-fallback" | "memory";
   storageWarning?: string;
   reconnectRequired: boolean;
 }

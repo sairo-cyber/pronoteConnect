@@ -24,7 +24,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
 fi
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-  printf '%s\n' "Cet installateur prend actuellement en charge Linux." >&2
+  printf '%s\n' "Sous Windows, lancez installer.cmd ou install.ps1." >&2
   exit 1
 fi
 
@@ -41,13 +41,13 @@ download() {
   fi
 }
 
-node_command="$(command -v node || true)"
+node_command="${runtime_dir}/node/bin/node"
 node_major=0
-if [[ -n "${node_command}" ]]; then
+if [[ -x "${node_command}" ]]; then
   node_major="$(${node_command} -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || printf '0')"
 fi
 
-if (( node_major < 22 )); then
+if (( node_major < 22 )) || [[ ! -x "${runtime_dir}/node/bin/npm" ]]; then
   node_version="v22.23.2"
   case "$(uname -m)" in
     x86_64|amd64) node_arch="x64" ;;
@@ -73,13 +73,19 @@ if (( node_major < 22 )); then
 fi
 
 export PATH="$(dirname "${node_command}"):${PATH}"
+export PLAYWRIGHT_BROWSERS_PATH="${runtime_dir}/browsers"
 cd "${root_dir}"
 mkdir -p "${runtime_dir}" "${data_dir}"
 chmod 700 "${runtime_dir}" "${data_dir}"
 
 npm ci
 node node_modules/electron/install.js
-npm exec playwright install chromium
+if command -v apt-get >/dev/null 2>&1; then
+  npm exec playwright install --with-deps chromium
+else
+  npm exec playwright install chromium
+fi
+node scripts/check-browser.mjs
 node scripts/install-tunnel-client.mjs
 npm run verify
 
@@ -97,6 +103,7 @@ escaped_root="$(escape_unit "${root_dir}")"
 escaped_node="$(escape_unit "${node_command}")"
 escaped_data="$(escape_unit "${data_dir}")"
 escaped_tunnel="$(escape_unit "${runtime_dir}/tunnel-client/tunnel-client")"
+escaped_browsers="$(escape_unit "${runtime_dir}/browsers")"
 escaped_working_dir="${escaped_root// /\\x20}"
 tailscale_host=""
 if command -v tailscale >/dev/null 2>&1; then
@@ -118,6 +125,7 @@ printf '%s\n' \
   "Environment=\"PRONOTECONNECT_DATA_DIR=${escaped_data}\"" \
   "Environment=\"PRONOTECONNECT_INSTALL_DIR=${escaped_root}\"" \
   "Environment=\"PRONOTECONNECT_TUNNEL_CLIENT=${escaped_tunnel}\"" \
+  "Environment=\"PLAYWRIGHT_BROWSERS_PATH=${escaped_browsers}\"" \
   "Environment=\"PRONOTECONNECT_TAILSCALE_HOST=${escaped_tailscale_host}\"" \
   'Environment="PRONOTECONNECT_MANAGED_SERVICE=1"' \
   'Restart=on-failure' \
@@ -147,7 +155,8 @@ rm -f "${tmp_desktop}"
 
 systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS >/dev/null 2>&1 || true
 systemctl --user daemon-reload
-systemctl --user enable --now pronoteconnect.service
+systemctl --user enable pronoteconnect.service
+systemctl --user restart pronoteconnect.service
 
 if ! systemctl --user is-active --quiet pronoteconnect.service; then
   printf '%s\n' "Le service PronoteConnect n'a pas démarré." >&2

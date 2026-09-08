@@ -4,7 +4,7 @@ import { extname, join, relative } from "node:path";
 const root = process.cwd();
 const ignoredDirectories = new Set(["node_modules", "dist", "coverage", ".data", ".runtime", ".git", "test-results", "playwright-report"]);
 const ignoredFile = "scripts/security-scan.ts";
-const textExtensions = new Set([".ts", ".js", ".mjs", ".cjs", ".sh", ".json", ".md", ".html", ".css", ".toml", ""]);
+const textExtensions = new Set([".ts", ".js", ".mjs", ".cjs", ".sh", ".ps1", ".cmd", ".json", ".md", ".html", ".css", ".toml", ".yml", ".yaml", ""]);
 const forbidden = [
   new RegExp(`s${"k"}-[A-Za-z0-9_-]{20,}`, "u"),
   new RegExp(`Bearer\\s+[A-Za-z0-9._~+/${"="}-]{24,}`, "u"),

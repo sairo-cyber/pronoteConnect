@@ -9,7 +9,10 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,3 +21,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+      - name: installer chromium sur linux
+        if: runner.os == 'Linux'
+        run: npm exec playwright install --with-deps chromium
+      - name: installer chromium sur windows
+        if: runner.os == 'Windows'
+        run: npm exec playwright install chromium
+      - name: vérifier chromium
+        run: node scripts/check-browser.mjs
+      - name: vérifier powershell et dpapi
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path .\install.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw (($errors | ForEach-Object { $_.Message }) -join "`n") }
+          node --input-type=module -e "import('./dist/src/storage/windows-dpapi.js').then(async m => { const value = Buffer.from('pronoteconnect'); const encrypted = await m.protectForCurrentWindowsUser(value); const clear = await m.unprotectForCurrentWindowsUser(encrypted); if (!clear.equals(value)) process.exit(1); })"

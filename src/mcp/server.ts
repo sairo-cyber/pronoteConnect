@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
+import { APP_VERSION } from "../config.js";
 import {
   AttachmentListInputSchema,
   AttachmentReadInputSchema,
@@ -46,7 +47,7 @@ function guarded<T extends unknown[]>(handler: (...args: T) => Promise<unknown>)
 
 export function createPronoteMcpServer(controller: ToolController): McpServer {
   const server = new McpServer(
-    { name: "pronoteconnect", version: "0.2.0" },
+    { name: "pronoteconnect", version: APP_VERSION },
     {
       instructions: [
         "PronoteConnect est un service mono-utilisateur strictement en lecture seule pour les données scolaires PRONOTE.",

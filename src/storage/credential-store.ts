@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { z } from "zod/v4";
 import type { StoredCredential } from "../domain/types.js";
+import { protectForCurrentWindowsUser, unprotectForCurrentWindowsUser, windowsDpapiAvailable } from "./windows-dpapi.js";
 
 const CredentialSchema = z.object({
   schemaVersion: z.literal(1),
@@ -19,7 +20,7 @@ const CredentialSchema = z.object({
 }).strict();
 
 export interface CredentialStore {
-  readonly backend: "system-keyring" | "encrypted-local-fallback" | "memory";
+  readonly backend: "system-keyring" | "windows-dpapi" | "encrypted-local-fallback" | "memory";
   readonly warning?: string;
   get(): Promise<StoredCredential | null>;
   set(value: StoredCredential): Promise<void>;
@@ -178,6 +179,44 @@ export class EncryptedFileCredentialStore implements CredentialStore {
   }
 }
 
+export class WindowsDpapiCredentialStore implements CredentialStore {
+  readonly backend = "windows-dpapi" as const;
+  readonly #secretPath: string;
+
+  constructor(dataDir: string) {
+    this.#secretPath = join(dataDir, "credentials.dpapi");
+  }
+
+  async get(): Promise<StoredCredential | null> {
+    let encrypted: string;
+    try {
+      encrypted = await readFile(this.#secretPath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    const cleartext = await unprotectForCurrentWindowsUser(encrypted.trim());
+    try {
+      return parseCredential(cleartext.toString("utf8"));
+    } finally {
+      cleartext.fill(0);
+    }
+  }
+
+  async set(value: StoredCredential): Promise<void> {
+    const cleartext = Buffer.from(JSON.stringify(CredentialSchema.parse(value)), "utf8");
+    try {
+      await atomicPrivateWrite(this.#secretPath, await protectForCurrentWindowsUser(cleartext));
+    } finally {
+      cleartext.fill(0);
+    }
+  }
+
+  async delete(): Promise<void> {
+    await rm(this.#secretPath, { force: true });
+  }
+}
+
 export class MemoryCredentialStore implements CredentialStore {
   readonly backend = "memory" as const;
   #value: StoredCredential | null;
@@ -201,5 +240,17 @@ export class MemoryCredentialStore implements CredentialStore {
 
 export async function createCredentialStore(dataDir: string): Promise<CredentialStore> {
   if (await SecretToolCredentialStore.available()) return new SecretToolCredentialStore();
+  if (await windowsDpapiAvailable()) {
+    const store = new WindowsDpapiCredentialStore(dataDir);
+    if (!await store.get()) {
+      const fallback = new EncryptedFileCredentialStore(dataDir);
+      const previous = await fallback.get();
+      if (previous) {
+        await store.set(previous);
+        await fallback.delete();
+      }
+    }
+    return store;
+  }
   return new EncryptedFileCredentialStore(dataDir);
 }

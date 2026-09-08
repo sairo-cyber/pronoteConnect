@@ -3,6 +3,7 @@ import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { z } from "zod/v4";
+import { protectForCurrentWindowsUser, unprotectForCurrentWindowsUser, windowsDpapiAvailable } from "./windows-dpapi.js";
 
 const TunnelSettingsSchema = z.object({
   schemaVersion: z.literal(1),
@@ -15,7 +16,7 @@ const TunnelSettingsSchema = z.object({
 export type TunnelSettings = z.infer<typeof TunnelSettingsSchema>;
 
 export interface TunnelSettingsStore {
-  readonly backend: "system-keyring" | "encrypted-local-fallback" | "memory";
+  readonly backend: "system-keyring" | "windows-dpapi" | "encrypted-local-fallback" | "memory";
   readonly warning?: string;
   get(): Promise<TunnelSettings | null>;
   set(value: TunnelSettings): Promise<void>;
@@ -162,6 +163,44 @@ export class EncryptedFileTunnelSettingsStore implements TunnelSettingsStore {
   }
 }
 
+export class WindowsDpapiTunnelSettingsStore implements TunnelSettingsStore {
+  readonly backend = "windows-dpapi" as const;
+  readonly #secretPath: string;
+
+  constructor(dataDir: string) {
+    this.#secretPath = join(dataDir, "tunnel.dpapi");
+  }
+
+  async get(): Promise<TunnelSettings | null> {
+    let encrypted: string;
+    try {
+      encrypted = await readFile(this.#secretPath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    const cleartext = await unprotectForCurrentWindowsUser(encrypted.trim());
+    try {
+      return TunnelSettingsSchema.parse(JSON.parse(cleartext.toString("utf8")));
+    } finally {
+      cleartext.fill(0);
+    }
+  }
+
+  async set(value: TunnelSettings): Promise<void> {
+    const cleartext = Buffer.from(JSON.stringify(TunnelSettingsSchema.parse(value)), "utf8");
+    try {
+      await atomicWrite(this.#secretPath, await protectForCurrentWindowsUser(cleartext));
+    } finally {
+      cleartext.fill(0);
+    }
+  }
+
+  async delete(): Promise<void> {
+    await rm(this.#secretPath, { force: true });
+  }
+}
+
 export class MemoryTunnelSettingsStore implements TunnelSettingsStore {
   readonly backend = "memory" as const;
   #value: TunnelSettings | null;
@@ -185,6 +224,18 @@ export class MemoryTunnelSettingsStore implements TunnelSettingsStore {
 
 export async function createTunnelSettingsStore(dataDir: string): Promise<TunnelSettingsStore> {
   if (await SecretToolTunnelSettingsStore.available()) return new SecretToolTunnelSettingsStore();
+  if (await windowsDpapiAvailable()) {
+    const store = new WindowsDpapiTunnelSettingsStore(dataDir);
+    if (!await store.get()) {
+      const fallback = new EncryptedFileTunnelSettingsStore(dataDir);
+      const previous = await fallback.get();
+      if (previous) {
+        await store.set(previous);
+        await fallback.delete();
+      }
+    }
+    return store;
+  }
   return new EncryptedFileTunnelSettingsStore(dataDir);
 }
 

@@ -125,7 +125,9 @@ function renderStatus(status) {
     : "—";
   byId("storage-backend").textContent = status.connection.storageBackend === "system-keyring"
     ? "trousseau système"
-    : status.connection.storageBackend === "memory" ? "mémoire de test" : "fichier local chiffré";
+    : status.connection.storageBackend === "windows-dpapi"
+      ? "protection du compte windows"
+      : status.connection.storageBackend === "memory" ? "mémoire de test" : "fichier local chiffré";
   toggle("storage-warning", Boolean(status.connection.storageWarning));
   byId("storage-warning").textContent = status.connection.storageWarning ?? "";
   toggle("pronote-selector", !connected);

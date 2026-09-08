@@ -1,9 +1,16 @@
 {
   "name": "pronoteconnect",
-  "version": "0.2.0",
+  "productName": "PronoteConnect",
+  "version": "0.3.0",
   "private": true,
   "description": "Connecteur PRONOTE auto-hébergé, local et en lecture seule pour ChatGPT.",
   "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sairo-cyber/pronoteConnect.git"
+  },
+  "homepage": "https://github.com/sairo-cyber/pronoteConnect#readme",
+  "bugs": "https://github.com/sairo-cyber/pronoteConnect/issues",
   "type": "module",
   "engines": {
     "node": ">=22"

@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 
 export const APP_NAME = "PronoteConnect";
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 export const TIME_ZONE = "Europe/Paris";
 export const DEFAULT_PORT = 37_421;
 export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
