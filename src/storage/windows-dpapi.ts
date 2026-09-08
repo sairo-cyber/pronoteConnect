@@ -1,57 +1,17 @@
-import { spawn } from "node:child_process";
-
-const protectScript = [
-  "$value = [Console]::In.ReadToEnd()",
-  "$secure = ConvertTo-SecureString -String $value -AsPlainText -Force",
-  "$encrypted = ConvertFrom-SecureString -SecureString $secure",
-  "[Console]::Out.Write($encrypted)",
-].join("; ");
-
-const unprotectScript = [
-  "$value = [Console]::In.ReadToEnd()",
-  "$secure = ConvertTo-SecureString -String $value",
-  "$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)",
-  "try { [Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }",
-].join("; ");
-
-function run(script: string, input: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let size = 0;
-    child.once("error", reject);
-    child.stdout.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > 4 * 1024 * 1024) child.kill();
-      else stdout.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > 4 * 1024 * 1024) child.kill();
-      else stderr.push(chunk);
-    });
-    child.once("close", (code) => {
-      if (code === 0) resolve(Buffer.concat(stdout).toString("utf8").trim());
-      else reject(new Error(`WINDOWS_DPAPI_FAILED_${code ?? 1}`));
-    });
-    child.stdin.end(input);
-  });
-}
+import { Dpapi, isPlatformSupported } from "@primno/dpapi";
 
 export async function protectForCurrentWindowsUser(cleartext: Buffer): Promise<string> {
-  return run(protectScript, cleartext.toString("base64"));
+  if (!isPlatformSupported) throw new Error("WINDOWS_DPAPI_UNAVAILABLE");
+  return Buffer.from(Dpapi.protectData(cleartext, null, "CurrentUser")).toString("base64");
 }
 
 export async function unprotectForCurrentWindowsUser(encrypted: string): Promise<Buffer> {
-  return Buffer.from(await run(unprotectScript, encrypted), "base64");
+  if (!isPlatformSupported) throw new Error("WINDOWS_DPAPI_UNAVAILABLE");
+  return Buffer.from(Dpapi.unprotectData(Buffer.from(encrypted, "base64"), null, "CurrentUser"));
 }
 
 export async function windowsDpapiAvailable(): Promise<boolean> {
-  if (process.platform !== "win32") return false;
+  if (!isPlatformSupported) return false;
   try {
     const probe = Buffer.from("pronoteconnect", "utf8");
     const encrypted = await protectForCurrentWindowsUser(probe);

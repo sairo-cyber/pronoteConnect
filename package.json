@@ -33,6 +33,7 @@
   "dependencies": {
     "@blockshub/pawnote-lts": "1.6.4",
     "@modelcontextprotocol/sdk": "1.30.0",
+    "@primno/dpapi": "^2.0.1",
     "electron": "44.2.0",
     "express": "5.2.1",
     "fflate": "0.8.3",
