@@ -22,6 +22,8 @@ export interface TunnelStatus {
   pluginAppId?: string;
   storageBackend: TunnelSettingsStore["backend"];
   storageWarning?: string;
+  lastError?: string;
+  retryAttempt?: number;
   message: string;
 }
 
@@ -31,6 +33,7 @@ export interface TunnelManagerOptions {
   clientPath?: string;
   settingsStore: TunnelSettingsStore;
   logger: SafeLogger;
+  mcpServerUrl?: string;
   nodePath?: string;
   stdioEntry?: string;
 }
@@ -60,23 +63,84 @@ async function findInPath(name: string): Promise<string | undefined> {
   return undefined;
 }
 
-function run(command: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs = 45_000): Promise<number> {
+interface CommandResult {
+  code: number;
+  output: string;
+  timedOut: boolean;
+}
+
+function run(command: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs = 45_000): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, stdio: "ignore" });
-    const timer = setTimeout(() => child.kill(), timeoutMs);
+    const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let output = "";
+    let timedOut = false;
+    const collect = (chunk: Buffer): void => {
+      if (output.length < 64_000) output += chunk.toString("utf8").slice(0, 64_000 - output.length);
+    };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
     child.once("error", (error) => {
       clearTimeout(timer);
       reject(error);
     });
     child.once("close", (code) => {
       clearTimeout(timer);
-      resolve(code ?? 1);
+      resolve({ code: code ?? 1, output, timedOut });
     });
   });
 }
 
+export function classifyTunnelFailure(result: CommandResult, fallback: string): string {
+  const output = result.output.toLowerCase();
+  if (result.timedOut) return "TUNNEL_COMMAND_TIMEOUT";
+  if (/\b(?:401|403)\b|unauthori[sz]ed|forbidden|api key|permission/iu.test(output)) return "TUNNEL_AUTH_REJECTED";
+  if (/\b404\b|tunnel[^\n]{0,80}not found|unknown tunnel/iu.test(output)) return "TUNNEL_NOT_FOUND";
+  if (/address already in use|bind[^\n]{0,80}(?:failed|error)/iu.test(output)) return "TUNNEL_LOCAL_PORT_BUSY";
+  if (/timed? out|connection (?:refused|reset)|network|dns|lookup|resolve|unreachable/iu.test(output)) return "TUNNEL_NETWORK_ERROR";
+  return fallback;
+}
+
+export function buildTunnelInitArguments(
+  profileDir: string,
+  tunnelId: string,
+  target: { mcpServerUrl?: string; mcpCommand?: string },
+): string[] {
+  const base = [
+    "init",
+    "--force",
+    "--sample", target.mcpServerUrl ? "sample_mcp_remote_no_auth" : "sample_mcp_stdio_local",
+    "--profile", "pronoteconnect",
+    "--profile-dir", profileDir,
+    "--health-listen-addr", "127.0.0.1:0",
+    "--tunnel-id", tunnelId,
+  ];
+  if (target.mcpServerUrl) return [...base, "--mcp-server-url", target.mcpServerUrl];
+  if (target.mcpCommand) return [...base, "--mcp-command", target.mcpCommand];
+  throw new Error("TUNNEL_TARGET_MISSING");
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+function failureMessage(code: string): string {
+  const messages: Record<string, string> = {
+    TUNNEL_AUTH_REJECTED: "La clé du tunnel est refusée ou ne possède pas les droits Tunnels Read et Use.",
+    TUNNEL_NOT_FOUND: "Le tunnel est introuvable dans l'organisation OpenAI associée à cette clé.",
+    TUNNEL_LOCAL_PORT_BUSY: "Le port de contrôle local du tunnel est déjà utilisé.",
+    TUNNEL_NETWORK_ERROR: "Le tunnel ne peut pas joindre OpenAI. Vérifiez Internet, le pare-feu et le proxy.",
+    TUNNEL_COMMAND_TIMEOUT: "Le client du tunnel ne répond pas dans le délai prévu.",
+    TUNNEL_PROFILE_FAILED: "Le profil local du tunnel n'a pas pu être créé.",
+    TUNNEL_CONFIGURATION_FAILED: "La vérification du tunnel a échoué.",
+    TUNNEL_START_FAILED: "Le client du tunnel n'a pas pu démarrer.",
+    TUNNEL_STOPPED: "Le client du tunnel s'est arrêté de façon inattendue.",
+    TUNNEL_NOT_READY: "Le tunnel a démarré mais n'est pas devenu prêt.",
+  };
+  return messages[code] ?? "Le tunnel a rencontré une erreur inconnue.";
 }
 
 function pluginAppId(value: string): string {
@@ -98,6 +162,7 @@ export class TunnelManager {
   readonly #configuredClientPath: string | undefined;
   readonly #settingsStore: TunnelSettingsStore;
   readonly #logger: SafeLogger;
+  readonly #mcpServerUrl: string | undefined;
   readonly #nodePath: string;
   readonly #stdioEntry: string;
   readonly #profileDir: string;
@@ -105,6 +170,9 @@ export class TunnelManager {
   #child: ChildProcess | undefined;
   #wanted = false;
   #restartTimer: NodeJS.Timeout | undefined;
+  #readinessTimer: NodeJS.Timeout | undefined;
+  #retryAttempt = 0;
+  #lastError: string | undefined;
 
   constructor(options: TunnelManagerOptions) {
     this.#dataDir = options.dataDir;
@@ -112,6 +180,7 @@ export class TunnelManager {
     this.#configuredClientPath = options.clientPath;
     this.#settingsStore = options.settingsStore;
     this.#logger = options.logger;
+    this.#mcpServerUrl = options.mcpServerUrl ?? (process.platform === "win32" ? "http://127.0.0.1:37421/mcp" : undefined);
     this.#nodePath = options.nodePath ?? process.execPath;
     this.#stdioEntry = options.stdioEntry ?? join(options.installDir, "dist", "src", "stdio.js");
     this.#profileDir = join(options.dataDir, "tunnel");
@@ -142,20 +211,6 @@ export class TunnelManager {
 
   async #writeMcpLauncher(): Promise<string> {
     await mkdir(this.#profileDir, { recursive: true, mode: 0o700 });
-    if (process.platform === "win32") {
-      const path = join(this.#profileDir, "mcp-stdio.cmd");
-      const content = [
-        "@echo off",
-        "set CONTROL_PLANE_API_KEY=",
-        "set OPENAI_API_KEY=",
-        "set PRONOTECONNECT_SUPERVISE_TUNNEL=0",
-        `set "PRONOTECONNECT_DATA_DIR=${this.#dataDir}"`,
-        `"${this.#nodePath}" "${this.#stdioEntry}"`,
-        "",
-      ].join("\r\n");
-      await writeFile(path, content, { mode: 0o600 });
-      return `cmd /d /s /c "${path}"`;
-    }
     const path = join(this.#profileDir, "mcp-stdio.sh");
     const content = [
       "#!/usr/bin/env sh",
@@ -173,30 +228,24 @@ export class TunnelManager {
   async #prepare(settings: TunnelSettings): Promise<void> {
     const client = await this.#clientPath();
     if (!client) throw new Error("TUNNEL_CLIENT_MISSING");
-    const mcpCommand = await this.#writeMcpLauncher();
-    const code = await run(client, [
-      "init",
-      "--force",
-      "--sample", "sample_mcp_stdio_local",
-      "--profile", "pronoteconnect",
-      "--profile-dir", this.#profileDir,
-      "--health-listen-addr", "127.0.0.1:0",
-      "--tunnel-id", settings.tunnelId,
-      "--mcp-command", mcpCommand,
-    ], this.#environment(settings));
-    if (code !== 0) throw new Error("TUNNEL_PROFILE_FAILED");
+    await mkdir(this.#profileDir, { recursive: true, mode: 0o700 });
+    const target = this.#mcpServerUrl
+      ? { mcpServerUrl: this.#mcpServerUrl }
+      : { mcpCommand: await this.#writeMcpLauncher() };
+    const result = await run(client, buildTunnelInitArguments(this.#profileDir, settings.tunnelId, target), this.#environment(settings));
+    if (result.code !== 0) throw new Error(classifyTunnelFailure(result, "TUNNEL_PROFILE_FAILED"));
   }
 
   async #doctor(settings: TunnelSettings): Promise<void> {
     const client = await this.#clientPath();
     if (!client) throw new Error("TUNNEL_CLIENT_MISSING");
-    const code = await run(client, [
+    const result = await run(client, [
       "doctor",
       "--profile", "pronoteconnect",
       "--profile-dir", this.#profileDir,
       "--explain",
     ], this.#environment(settings));
-    if (code !== 0) throw new Error("TUNNEL_CONFIGURATION_FAILED");
+    if (result.code !== 0) throw new Error(classifyTunnelFailure(result, "TUNNEL_CONFIGURATION_FAILED"));
   }
 
   async configure(input: unknown): Promise<TunnelStatus> {
@@ -209,8 +258,13 @@ export class TunnelManager {
       updatedAt: new Date().toISOString(),
       ...(previous?.pluginAppId ? { pluginAppId: previous.pluginAppId } : {}),
     };
-    await this.#prepare(settings);
-    await this.#doctor(settings);
+    try {
+      await this.#prepare(settings);
+      await this.#doctor(settings);
+    } catch (error) {
+      this.#recordFailure(error instanceof Error ? error.message : "TUNNEL_CONFIGURATION_FAILED");
+      throw error;
+    }
     await this.#settingsStore.set(settings);
     await this.restart();
     return this.status();
@@ -233,33 +287,106 @@ export class TunnelManager {
     const settings = await this.#settingsStore.get();
     if (!settings) return;
     const client = await this.#clientPath();
-    if (!client) return;
-    await this.#prepare(settings);
+    if (!client) {
+      this.#lastError = "TUNNEL_CLIENT_MISSING";
+      return;
+    }
+    try {
+      await this.#prepare(settings);
+    } catch (error) {
+      this.#recordFailure(error instanceof Error ? error.message : "TUNNEL_PROFILE_FAILED");
+      this.#scheduleRestart();
+      return;
+    }
     await rm(this.#healthUrlFile, { force: true });
+    let output = "";
+    const collect = (chunk: Buffer): void => {
+      if (output.length < 64_000) output += chunk.toString("utf8").slice(0, 64_000 - output.length);
+    };
     const child = spawn(client, [
       "run",
       "--profile", "pronoteconnect",
       "--profile-dir", this.#profileDir,
       "--health.url-file", this.#healthUrlFile,
-    ], { env: this.#environment(settings), stdio: "ignore" });
+    ], { env: this.#environment(settings), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     this.#child = child;
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
     child.once("error", () => {
-      this.#logger.error("Le client du tunnel n'a pas démarré.");
+      this.#recordFailure("TUNNEL_START_FAILED");
     });
-    child.once("close", () => {
+    child.once("close", (code) => {
       if (this.#child === child) this.#child = undefined;
       if (this.#wanted) {
-        this.#restartTimer = setTimeout(() => {
-          void this.start().catch(() => undefined);
-        }, 5_000);
+        const result: CommandResult = { code: code ?? 1, output, timedOut: false };
+        if (this.#lastError !== "TUNNEL_NOT_READY") {
+          this.#recordFailure(classifyTunnelFailure(result, "TUNNEL_STOPPED"));
+        }
+        this.#scheduleRestart();
       }
     });
+    if (process.platform === "win32") {
+      this.#readinessTimer = setTimeout(() => {
+        void this.#confirmReady(child);
+      }, 1_000);
+    }
+  }
+
+  #recordFailure(code: string): void {
+    this.#lastError = code;
+    this.#logger.warn("Le tunnel privé doit être relancé.", { reason: code });
+  }
+
+  #scheduleRestart(): void {
+    if (!this.#wanted || this.#restartTimer) return;
+    this.#retryAttempt += 1;
+    const delays = process.platform === "win32" ? [2_000, 5_000, 10_000, 30_000, 60_000] : [5_000];
+    const delay = delays[Math.min(this.#retryAttempt - 1, delays.length - 1)] ?? 5_000;
+    this.#restartTimer = setTimeout(() => {
+      this.#restartTimer = undefined;
+      void this.start().catch(() => {
+        this.#recordFailure("TUNNEL_START_FAILED");
+        this.#scheduleRestart();
+      });
+    }, delay);
+  }
+
+  async #ready(): Promise<boolean> {
+    try {
+      const base = localHealthUrl(await readFile(this.#healthUrlFile, "utf8"));
+      const response = await fetch(new URL("/readyz", base), {
+        signal: AbortSignal.timeout(1_500),
+        redirect: "error",
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async #confirmReady(child: ChildProcess, attempts = 30): Promise<void> {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (!this.#wanted || this.#child !== child || child.exitCode !== null) return;
+      if (await this.#ready()) {
+        this.#retryAttempt = 0;
+        this.#lastError = undefined;
+        this.#logger.info("Le tunnel privé est prêt.");
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    if (this.#wanted && this.#child === child && child.exitCode === null) {
+      this.#recordFailure("TUNNEL_NOT_READY");
+      child.kill();
+    }
   }
 
   async stop(): Promise<void> {
     this.#wanted = false;
     if (this.#restartTimer) clearTimeout(this.#restartTimer);
+    if (this.#readinessTimer) clearTimeout(this.#readinessTimer);
     this.#restartTimer = undefined;
+    this.#readinessTimer = undefined;
     const child = this.#child;
     this.#child = undefined;
     if (!child || child.exitCode !== null) return;
@@ -273,6 +400,8 @@ export class TunnelManager {
 
   async restart(): Promise<void> {
     await this.stop();
+    this.#retryAttempt = 0;
+    this.#lastError = undefined;
     await this.start();
   }
 
@@ -284,18 +413,10 @@ export class TunnelManager {
 
   async status(): Promise<TunnelStatus> {
     const [client, settings] = await Promise.all([this.#clientPath(), this.#settingsStore.get()]);
-    let active = false;
-    if (settings) {
-      try {
-        const base = localHealthUrl(await readFile(this.#healthUrlFile, "utf8"));
-        const response = await fetch(new URL("/readyz", base), {
-          signal: AbortSignal.timeout(1_500),
-          redirect: "error",
-        });
-        active = response.ok;
-      } catch {
-        active = false;
-      }
+    const active = Boolean(settings) && await this.#ready();
+    if (active) {
+      this.#retryAttempt = 0;
+      this.#lastError = undefined;
     }
     const status: TunnelStatus = {
       clientInstalled: Boolean(client),
@@ -309,11 +430,15 @@ export class TunnelManager {
           ? "Créez votre tunnel OpenAI puis enregistrez sa clé."
           : active
             ? "Le tunnel privé est actif."
-            : "Le tunnel est configuré mais ne répond pas encore.",
+            : this.#lastError
+              ? `${failureMessage(this.#lastError)} Reconnexion automatique en cours.`
+              : "Le tunnel démarre et vérifie sa connexion à OpenAI.",
     };
     if (settings?.tunnelId) status.tunnelId = settings.tunnelId;
     if (settings?.pluginAppId) status.pluginAppId = settings.pluginAppId;
     if (this.#settingsStore.warning) status.storageWarning = this.#settingsStore.warning;
+    if (this.#lastError) status.lastError = failureMessage(this.#lastError);
+    if (this.#retryAttempt > 0) status.retryAttempt = this.#retryAttempt;
     return status;
   }
 }

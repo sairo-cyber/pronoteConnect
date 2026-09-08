@@ -40,6 +40,7 @@ export async function createRuntime(config: AppConfig, overrides: RuntimeOverrid
       installDir: config.installDir,
       settingsStore: overrides.tunnelSettingsStore ?? await createTunnelSettingsStore(config.dataDir),
       logger,
+      ...(process.platform === "win32" ? { mcpServerUrl: `http://127.0.0.1:${config.port}/mcp` } : {}),
       ...(config.tunnelClientPath ? { clientPath: config.tunnelClientPath } : {}),
     });
     await tunnel.start();

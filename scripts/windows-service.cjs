@@ -1,5 +1,5 @@
 const { spawn, spawnSync } = require("node:child_process");
-const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } = require("node:fs");
 const http = require("node:http");
 const { join, resolve } = require("node:path");
 
@@ -13,6 +13,27 @@ const dataDir = join(root, ".data");
 const pidFile = join(dataDir, "pronoteconnect.pid");
 const serverEntry = join(root, "dist", "src", "index.js");
 const tunnelClient = join(root, ".runtime", "tunnel-client", "tunnel-client.exe");
+const logDir = join(dataDir, "logs");
+const logFile = join(logDir, "pronoteconnect.log");
+const previousLogFile = join(logDir, "pronoteconnect.previous.log");
+const errorFile = join(logDir, "last-service-error.txt");
+
+function prepareLog() {
+  mkdirSync(logDir, { recursive: true });
+  try {
+    if (statSync(logFile).size > 2 * 1024 * 1024) {
+      rmSync(previousLogFile, { force: true });
+      renameSync(logFile, previousLogFile);
+    }
+  } catch {
+  }
+}
+
+function saveError(message) {
+  prepareLog();
+  const safe = String(message).replace(/[\r\n]+/gu, " ").slice(0, 500);
+  writeFileSync(errorFile, `${new Date().toISOString()} ${safe}\n`, { encoding: "utf8" });
+}
 
 function healthy(timeout = 1_500) {
   return new Promise((resolveHealth) => {
@@ -72,25 +93,33 @@ async function start() {
   const previousPid = readPid();
   if (previousPid && processExists(previousPid)) {
     if (await waitForHealth(true, 20)) return;
-    throw new Error("Un processus PronoteConnect ne répond pas.");
+    rmSync(pidFile, { force: true });
   }
   mkdirSync(dataDir, { recursive: true });
+  prepareLog();
   const host = tailscaleHost();
-  const child = spawn(process.execPath, [serverEntry], {
-    cwd: root,
-    detached: true,
-    windowsHide: true,
-    stdio: "ignore",
-    env: {
-      ...process.env,
-      PRONOTECONNECT_DATA_DIR: dataDir,
-      PRONOTECONNECT_INSTALL_DIR: root,
-      PRONOTECONNECT_TUNNEL_CLIENT: tunnelClient,
-      PRONOTECONNECT_MANAGED_SERVICE: "1",
-      PLAYWRIGHT_BROWSERS_PATH: join(root, ".runtime", "browsers"),
-      ...(host ? { PRONOTECONNECT_TAILSCALE_HOST: host } : {}),
-    },
-  });
+  const logHandle = openSync(logFile, "a");
+  let child;
+  try {
+    child = spawn(process.execPath, [serverEntry], {
+      cwd: root,
+      detached: true,
+      windowsHide: true,
+      stdio: ["ignore", logHandle, logHandle],
+      env: {
+        ...process.env,
+        PRONOTECONNECT_DATA_DIR: dataDir,
+        PRONOTECONNECT_INSTALL_DIR: root,
+        PRONOTECONNECT_TUNNEL_CLIENT: tunnelClient,
+        PRONOTECONNECT_MANAGED_SERVICE: "1",
+        PLAYWRIGHT_BROWSERS_PATH: join(root, ".runtime", "browsers"),
+        ...(host ? { PRONOTECONNECT_TAILSCALE_HOST: host } : {}),
+      },
+    });
+  } finally {
+    closeSync(logHandle);
+  }
+  closeSync(logHandle);
   writeFileSync(pidFile, `${child.pid}\n`, { encoding: "utf8" });
   child.unref();
   if (!await waitForHealth(true)) {
@@ -98,6 +127,8 @@ async function start() {
     rmSync(pidFile, { force: true });
     throw new Error("PronoteConnect n'a pas démarré.");
   }
+  rmSync(errorFile, { force: true });
+  rmSync(errorFile, { force: true });
   process.stdout.write("PronoteConnect est actif.\n");
 }
 
@@ -125,6 +156,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  const message = error instanceof Error ? error.message : String(error);
+  saveError(message);
+  process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });

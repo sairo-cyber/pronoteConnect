@@ -23,7 +23,7 @@ ordinateur de l’utilisateur
        └── jeton PRONOTE chiffré localement
 ```
 
-Le même trajet est utilisé sur le PC, le web et le téléphone. Aucun port entrant public n’est ouvert. Le PC doit rester allumé et connecté à Internet pendant l’utilisation.
+Le même trajet est utilisé sur le PC, le web et le téléphone. ChatGPT et Codex ne sont jamais configurés directement sur le MCP local : leurs demandes passent toujours par le plugin et le tunnel. Seul le tunnel déclenche les appels vers le MCP à l’intérieur de l’ordinateur. Aucun port entrant public n’est ouvert. Le PC doit rester allumé et connecté à Internet pendant l’utilisation.
 
 ## Systèmes pris en charge
 
@@ -77,7 +77,7 @@ Si `winget` n’existe pas, téléchargez Git depuis [git-scm.com](https://git-s
 
 Windows demande une validation administrateur afin d’enregistrer le démarrage automatique. Le serveur reste dans la session de l’utilisateur pour que la fenêtre EduConnect puisse s’afficher. Si Windows signale que le script open source n’est pas signé, vérifiez qu’il vient bien de ce dépôt avant de l’exécuter.
 
-L’installateur crée une entrée PronoteConnect dans le menu Démarrer et une tâche de démarrage automatique. Une petite icône près de l’horloge permet ensuite d’ouvrir l’interface, démarrer, redémarrer, arrêter ou désinstaller le service.
+L’installateur crée une entrée PronoteConnect dans le menu Démarrer et un raccourci silencieux dans le dossier de démarrage Windows. Une petite icône près de l’horloge permet ensuite d’ouvrir l’interface, démarrer, redémarrer, arrêter ou désinstaller le service. Les fenêtres de commande du tunnel restent masquées.
 
 ## Installation sur Linux
 
@@ -241,10 +241,18 @@ La suppression locale ne supprime pas automatiquement le plugin ni la clé sur l
 
 ### Le tunnel reste inactif
 
+- lisez le message persistant affiché sous le tunnel : PronoteConnect distingue une clé refusée, un tunnel introuvable, une panne réseau et un délai dépassé ;
 - vérifiez que l’identifiant commence par `tunnel_` ;
 - recréez une clé possédant `Tunnels Read` et `Tunnels Use` ;
 - vérifiez que la clé et le tunnel appartiennent à la même organisation OpenAI ;
-- cliquez sur **redémarrer** dans l’interface.
+- cliquez sur **redémarrer** dans l’interface ; le service réessaie aussi automatiquement avec un délai progressif.
+
+### Une fenêtre de commande apparaît ou le service s’arrête sous Windows
+
+- relancez `installer.cmd` pour remplacer l’ancien démarrage planifié par le lancement silencieux actuel ;
+- ouvrez PronoteConnect depuis l’icône près de l’horloge ; une erreur de démarrage affiche maintenant un message et propose d’ouvrir les journaux ;
+- le journal local se trouve dans `.data\logs\pronoteconnect.log` et l’erreur d’installation dans `.data\logs\last-install-error.txt` ;
+- ces fichiers restent ignorés par Git et ne contiennent pas la clé du tunnel ni le jeton PRONOTE.
 
 ### Le plugin n’apparaît pas
 

@@ -45,6 +45,11 @@ function safeApiMessage(error: unknown): { error: string; message: string } {
     TUNNEL_CLIENT_MISSING: "Le client du tunnel est absent. Relancez l'installateur.",
     TUNNEL_PROFILE_FAILED: "Le profil du tunnel n'a pas pu être créé.",
     TUNNEL_CONFIGURATION_FAILED: "La clé ou l'identifiant du tunnel n'est pas accepté. Vérifiez aussi les droits Tunnels Read et Use.",
+    TUNNEL_AUTH_REJECTED: "La clé est refusée ou ne possède pas les droits Tunnels Read et Use.",
+    TUNNEL_NOT_FOUND: "Ce tunnel est introuvable dans l'organisation OpenAI associée à la clé.",
+    TUNNEL_LOCAL_PORT_BUSY: "Un autre client du tunnel utilise déjà le port local.",
+    TUNNEL_NETWORK_ERROR: "Impossible de joindre OpenAI. Vérifiez Internet, le pare-feu et le proxy.",
+    TUNNEL_COMMAND_TIMEOUT: "Le client du tunnel ne répond pas. PronoteConnect réessaiera automatiquement.",
     TUNNEL_NOT_CONFIGURED: "Configurez d'abord le tunnel.",
     INVALID_PLUGIN_APP_ID: "Collez l'adresse du plugin ou son identifiant commençant par plugin_asdk_app_.",
   };

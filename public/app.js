@@ -184,6 +184,10 @@ function renderStatus(status) {
   if (!byId("tunnel-id").value && status.tunnel.tunnelId) byId("tunnel-id").value = status.tunnel.tunnelId;
   toggle("tunnel-storage-warning", Boolean(status.tunnel.storageWarning));
   byId("tunnel-storage-warning").textContent = status.tunnel.storageWarning ?? "";
+  toggle("tunnel-error", Boolean(status.tunnel.lastError));
+  byId("tunnel-error").textContent = status.tunnel.lastError
+    ? `${status.tunnel.lastError}${status.tunnel.retryAttempt ? ` Tentative automatique ${status.tunnel.retryAttempt}.` : ""}`
+    : "";
 
   toggle("plugin-details", status.tunnel.pluginConfigured);
   byId("saved-plugin-id").textContent = status.tunnel.pluginAppId ?? "—";

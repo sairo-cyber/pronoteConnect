@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSafeLogger } from "../src/security/redaction.js";
 import { MemoryTunnelSettingsStore } from "../src/storage/tunnel-settings-store.js";
-import { parsePluginAppId, TunnelManager } from "../src/tunnel/status.js";
+import { buildTunnelInitArguments, classifyTunnelFailure, parsePluginAppId, TunnelManager } from "../src/tunnel/status.js";
 
 const directories: string[] = [];
 
@@ -44,5 +44,39 @@ describe("configuration du tunnel", () => {
     const status = await manager.status();
     expect(status.configured).toBe(true);
     expect(JSON.stringify(status)).not.toContain(runtimeApiKey);
+  });
+
+  it("relie le tunnel au serveur MCP HTTP sans lancer de commande cmd", () => {
+    const args = buildTunnelInitArguments(
+      "C:\\PronoteConnect\\.data\\tunnel",
+      "tunnel_0123456789abcdef0123456789abcdef",
+      { mcpServerUrl: "http://127.0.0.1:37421/mcp" },
+    );
+    expect(args).toContain("sample_mcp_remote_no_auth");
+    expect(args).toContain("--mcp-server-url");
+    expect(args).toContain("http://127.0.0.1:37421/mcp");
+    expect(args).not.toContain("--mcp-command");
+    expect(args.join(" ").toLowerCase()).not.toContain("cmd.exe");
+  });
+
+  it("conserve le lancement stdio existant sur linux", () => {
+    const args = buildTunnelInitArguments(
+      "/tmp/pronoteconnect/tunnel",
+      "tunnel_0123456789abcdef0123456789abcdef",
+      { mcpCommand: "/tmp/pronoteconnect/mcp-stdio.sh" },
+    );
+    expect(args).toContain("sample_mcp_stdio_local");
+    expect(args).toContain("--mcp-command");
+    expect(args).toContain("/tmp/pronoteconnect/mcp-stdio.sh");
+    expect(args).not.toContain("--mcp-server-url");
+  });
+
+  it("transforme les erreurs du tunnel en messages sûrs et utiles", () => {
+    expect(classifyTunnelFailure({ code: 1, output: "request failed with status 403", timedOut: false }, "TUNNEL_PROFILE_FAILED"))
+      .toBe("TUNNEL_AUTH_REJECTED");
+    expect(classifyTunnelFailure({ code: 1, output: "connection timed out", timedOut: false }, "TUNNEL_PROFILE_FAILED"))
+      .toBe("TUNNEL_NETWORK_ERROR");
+    expect(classifyTunnelFailure({ code: 1, output: "anything", timedOut: true }, "TUNNEL_PROFILE_FAILED"))
+      .toBe("TUNNEL_COMMAND_TIMEOUT");
   });
 });

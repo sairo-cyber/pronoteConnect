@@ -12,9 +12,26 @@ $RuntimeDir = Join-Path $RootDir ".runtime"
 $DataDir = Join-Path $RootDir ".data"
 $RuntimeConfig = Join-Path $RuntimeDir "install.json"
 $ProgramsDir = [Environment]::GetFolderPath("Programs")
+$StartupDir = [Environment]::GetFolderPath("Startup")
 $ProgramsShortcut = Join-Path $ProgramsDir "PronoteConnect.lnk"
+$StartupShortcut = Join-Path $StartupDir "PronoteConnect.lnk"
 $DesktopMain = Join-Path $RootDir "desktop\main.cjs"
 $TaskName = "PronoteConnect"
+$LogDir = Join-Path $DataDir "logs"
+$InstallErrorFile = Join-Path $LogDir "last-install-error.txt"
+
+trap {
+  $Message = $_.Exception.Message -replace "[\r\n]+", " "
+  try {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+    [System.IO.File]::WriteAllText($InstallErrorFile, "$(Get-Date -Format o) $Message`r`n", (New-Object System.Text.UTF8Encoding($false)))
+  } catch {
+  }
+  Write-Host "PronoteConnect n'a pas pu terminer l'installation." -ForegroundColor Red
+  Write-Host $Message -ForegroundColor Red
+  Write-Host "Diagnostic : $InstallErrorFile"
+  exit 1
+}
 
 if ($PSVersionTable.PSEdition -eq "Core" -and -not $IsWindows) {
   throw "Utilisez install.sh sur Linux."
@@ -83,6 +100,7 @@ if ($Uninstall) {
   Stop-PronoteConnect
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
   Remove-Item $ProgramsShortcut -Force -ErrorAction SilentlyContinue
+  Remove-Item $StartupShortcut -Force -ErrorAction SilentlyContinue
   if ($DeleteData -and (Test-Path $DataDir)) {
     Remove-Item $DataDir -Recurse -Force
   }
@@ -177,15 +195,16 @@ $Shortcut.WorkingDirectory = $RootDir
 $Shortcut.Description = "Ouvrir PronoteConnect"
 $Shortcut.Save()
 
-$TaskUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$TaskAction = New-ScheduledTaskAction -Execute $ElectronPath -Argument "`"$DesktopMain`" --startup" -WorkingDirectory $RootDir
-$TaskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $TaskUser
-$TaskPrincipal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType Interactive -RunLevel Highest
-$TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
-Register-ScheduledTask -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger -Principal $TaskPrincipal -Settings $TaskSettings -Force | Out-Null
+$Startup = $Shell.CreateShortcut($StartupShortcut)
+$Startup.TargetPath = $ElectronPath
+$Startup.Arguments = "`"$DesktopMain`" --startup"
+$Startup.WorkingDirectory = $RootDir
+$Startup.Description = "Démarrer PronoteConnect silencieusement"
+$Startup.Save()
+Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 Invoke-Checked $NodeCommand @("scripts\windows-service.cjs", "restart")
-Start-ScheduledTask -TaskName $TaskName
+Start-Process -FilePath $ElectronPath -ArgumentList "`"$DesktopMain`" --startup" -WorkingDirectory $RootDir
 
 $Healthy = $false
 for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
@@ -203,6 +222,7 @@ if (-not $Healthy) {
   throw "Le service a démarré mais l'interface locale ne répond pas."
 }
 
+Remove-Item $InstallErrorFile -Force -ErrorAction SilentlyContinue
 Start-Process "http://127.0.0.1:37421"
 Write-Host "PronoteConnect est installé et démarré."
 Write-Host "L'interface est disponible sur http://127.0.0.1:37421"

@@ -6,7 +6,10 @@ const { join, resolve } = require("node:path");
 
 const root = resolve(__dirname, "..");
 const url = "http://127.0.0.1:37421";
+const logDir = join(root, ".data", "logs");
+const errorFile = join(logDir, "last-service-error.txt");
 let tray;
+let serviceOperation;
 
 function nodeCommand() {
   const portable = join(root, ".runtime", "node", "node.exe");
@@ -19,18 +22,62 @@ function nodeCommand() {
   return "node.exe";
 }
 
-function service(action) {
-  const command = process.platform === "win32" ? nodeCommand() : "systemctl";
-  const args = process.platform === "win32"
-    ? [join(root, "scripts", "windows-service.cjs"), action]
-    : ["--user", action, "pronoteconnect.service"];
-  const child = spawn(command, args, {
-    detached: true,
-    windowsHide: true,
-    stdio: "ignore",
-    cwd: root,
+function serviceError(fallback) {
+  try {
+    return readFileSync(errorFile, "utf8").trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function showServiceError(message) {
+  tray?.setToolTip("PronoteConnect · service arrêté");
+  const result = await dialog.showMessageBox({
+    type: "error",
+    title: "PronoteConnect ne démarre pas",
+    message: "Le service PronoteConnect n'a pas pu démarrer.",
+    detail: serviceError(message),
+    buttons: ["fermer", "ouvrir les journaux"],
+    defaultId: 1,
+    cancelId: 0,
   });
-  child.unref();
+  if (result.response === 1) await shell.openPath(logDir);
+}
+
+function runService(action) {
+  return new Promise((resolveService) => {
+    const command = process.platform === "win32" ? nodeCommand() : "systemctl";
+    const args = process.platform === "win32"
+      ? [join(root, "scripts", "windows-service.cjs"), action]
+      : ["--user", action, "pronoteconnect.service"];
+    const child = spawn(command, args, {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      cwd: root,
+    });
+    let output = "";
+    const collect = (chunk) => {
+      if (output.length < 8_000) output += chunk.toString("utf8").slice(0, 8_000 - output.length);
+    };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    child.once("error", (error) => resolveService({ ok: false, message: error.message }));
+    child.once("close", (code) => resolveService({
+      ok: code === 0,
+      message: output.trim() || `Le gestionnaire s'est arrêté avec le code ${code ?? 1}.`,
+    }));
+  });
+}
+
+function service(action, notify = false) {
+  if (serviceOperation) return serviceOperation;
+  serviceOperation = runService(action).then(async (result) => {
+    if (!result.ok && notify) await showServiceError(result.message);
+    return result;
+  }).finally(() => {
+    serviceOperation = undefined;
+  });
+  return serviceOperation;
 }
 
 function healthy() {
@@ -45,12 +92,17 @@ function healthy() {
 }
 
 async function open() {
-  service("start");
+  const result = await service("start", true);
+  if (!result.ok) return;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (await healthy()) break;
+    if (await healthy()) {
+      tray?.setToolTip("PronoteConnect · actif");
+      await shell.openExternal(url);
+      return;
+    }
     await new Promise((resolveWait) => setTimeout(resolveWait, 500));
   }
-  await shell.openExternal(url);
+  await showServiceError("L'interface locale ne répond pas après 30 secondes.");
 }
 
 async function uninstall() {
@@ -88,19 +140,20 @@ else {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Ouvrir PronoteConnect", click: () => void open() },
       { type: "separator" },
-      { label: "Démarrer le service", click: () => service("start") },
-      { label: "Redémarrer le service", click: () => service("restart") },
-      { label: "Arrêter le service", click: () => service("stop") },
+      { label: "Démarrer le service", click: () => void service("start", true) },
+      { label: "Redémarrer le service", click: () => void service("restart", true) },
+      { label: "Arrêter le service", click: () => void service("stop", true) },
       { type: "separator" },
       { label: "Désinstaller", click: () => void uninstall() },
       { label: "Quitter l'icône", click: () => app.quit() },
     ]));
     tray.on("double-click", () => void open());
-    if (process.argv.includes("--startup")) service("start");
+    if (process.argv.includes("--startup")) void service("start");
     if (process.argv.includes("--open")) void open();
     setInterval(() => {
       void healthy().then((active) => {
-        if (!active) service("start");
+        tray?.setToolTip(active ? "PronoteConnect · actif" : "PronoteConnect · redémarrage");
+        if (!active) void service("start");
       });
     }, 15_000).unref();
   });
