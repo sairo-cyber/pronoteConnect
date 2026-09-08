@@ -114,7 +114,6 @@ async function start() {
       ...(host ? { PRONOTECONNECT_TAILSCALE_HOST: host } : {}),
     },
   });
-  closeSync(logHandle);
   writeFileSync(pidFile, `${child.pid}\n`, { encoding: "utf8" });
   child.unref();
   if (!await waitForHealth(true)) {
@@ -122,7 +121,6 @@ async function start() {
     rmSync(pidFile, { force: true });
     throw new Error("PronoteConnect n'a pas démarré.");
   }
-  rmSync(errorFile, { force: true });
   rmSync(errorFile, { force: true });
   process.stdout.write("PronoteConnect est actif.\n");
 }
