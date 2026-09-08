@@ -40,14 +40,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Le client du tunnel Windows ne démarre pas." }
       - name: vérifier le service windows en arrière-plan
         if: runner.os == 'Windows'
+        timeout-minutes: 2
         shell: pwsh
         run: |
-          node scripts/windows-service.cjs restart
-          if ($LASTEXITCODE -ne 0) { throw "Le service Windows ne démarre pas." }
-          $status = node scripts/windows-service.cjs status
-          if ($LASTEXITCODE -ne 0 -or $status.Trim() -ne "active") { throw "Le service Windows ne répond pas." }
-          $response = Invoke-WebRequest "http://127.0.0.1:37421/health" -UseBasicParsing -TimeoutSec 5
-          if ($response.StatusCode -ne 200) { throw "Impossible de joindre l'interface Windows." }
+          try {
+            node scripts/windows-service.cjs restart
+            if ($LASTEXITCODE -ne 0) { throw "Le service Windows ne démarre pas." }
+            $status = node scripts/windows-service.cjs status
+            if ($LASTEXITCODE -ne 0 -or $status.Trim() -ne "active") { throw "Le service Windows ne répond pas." }
+            $response = Invoke-WebRequest "http://127.0.0.1:37421/health" -UseBasicParsing -TimeoutSec 5
+            if ($response.StatusCode -ne 200) { throw "Impossible de joindre l'interface Windows." }
+          } catch {
+            if (Test-Path .\.data\logs\pronoteconnect.log) { Get-Content .\.data\logs\pronoteconnect.log -Tail 80 }
+            throw
+          }
       - name: vérifier powershell et dpapi
         if: runner.os == 'Windows'
         shell: pwsh

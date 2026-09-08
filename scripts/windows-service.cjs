@@ -35,7 +35,7 @@ function saveError(message) {
   writeFileSync(errorFile, `${new Date().toISOString()} ${safe}\n`, { encoding: "utf8" });
 }
 
-function healthy(timeout = 1_500) {
+function healthy(timeout = 500) {
   return new Promise((resolveHealth) => {
     const request = http.get("http://127.0.0.1:37421/health", (response) => {
       response.resume();
@@ -77,7 +77,7 @@ function tailscaleHost() {
   return undefined;
 }
 
-async function waitForHealth(expected, attempts = 80) {
+async function waitForHealth(expected, attempts = 40) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (await healthy() === expected) return true;
     await new Promise((resolveWait) => setTimeout(resolveWait, 250));
@@ -155,9 +155,11 @@ async function main() {
   } else throw new Error(`Action inconnue : ${action}`);
 }
 
-main().catch((error) => {
+main().then(() => {
+  process.exit(0);
+}).catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   saveError(message);
   process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
+  process.exit(1);
 });
