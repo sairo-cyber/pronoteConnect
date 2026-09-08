@@ -2,16 +2,16 @@ import { spawn } from "node:child_process";
 
 const protectScript = [
   "$value = [Console]::In.ReadToEnd()",
-  "$clear = [Convert]::FromBase64String($value)",
-  "$encrypted = [Security.Cryptography.ProtectedData]::Protect($clear, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)",
-  "[Console]::Out.Write([Convert]::ToBase64String($encrypted))",
+  "$secure = ConvertTo-SecureString -String $value -AsPlainText -Force",
+  "$encrypted = ConvertFrom-SecureString -SecureString $secure",
+  "[Console]::Out.Write($encrypted)",
 ].join("; ");
 
 const unprotectScript = [
   "$value = [Console]::In.ReadToEnd()",
-  "$encrypted = [Convert]::FromBase64String($value)",
-  "$clear = [Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)",
-  "[Console]::Out.Write([Convert]::ToBase64String($clear))",
+  "$secure = ConvertTo-SecureString -String $value",
+  "$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)",
+  "try { [Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }",
 ].join("; ");
 
 function run(script: string, input: string): Promise<string> {
