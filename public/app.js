@@ -3,6 +3,8 @@ let selectedInstance = null;
 let pollHandle = null;
 let lastAuthPhase = "idle";
 let currentStatus = null;
+let currentStep = null;
+let updateUrl = null;
 
 const byId = (id) => document.getElementById(id);
 const toggle = (id, visible) => byId(id).classList.toggle("hidden", !visible);
@@ -68,11 +70,81 @@ function updateSteps(status) {
     status.connection.connected,
   ];
   const firstPending = done.findIndex((value) => !value);
+  if (currentStep === null) {
+    const saved = Number(window.localStorage.getItem("pronoteconnect-step"));
+    currentStep = Number.isInteger(saved) && saved >= 1 && saved <= 4
+      ? saved
+      : firstPending === -1 ? 4 : firstPending + 1;
+  }
   done.forEach((value, index) => {
     const marker = byId(`step-marker-${index + 1}`);
     marker.classList.toggle("is-done", value);
-    marker.classList.toggle("is-current", index === firstPending);
+    marker.classList.toggle("is-current", index + 1 === currentStep);
+    marker.setAttribute("aria-current", index + 1 === currentStep ? "step" : "false");
   });
+  document.querySelectorAll("[data-setup-step]").forEach((card) => {
+    card.classList.toggle("is-inactive", Number(card.dataset.setupStep) !== currentStep);
+  });
+  document.querySelectorAll("[data-step-next]").forEach((button) => {
+    const step = Number(button.dataset.stepNext);
+    button.textContent = done[step - 1] ? "continuer" : "passer quand même";
+    button.classList.toggle("button-secondary", Boolean(done[step - 1]));
+    button.classList.toggle("button-quiet", !done[step - 1]);
+  });
+}
+
+function showStep(step) {
+  currentStep = Math.min(4, Math.max(1, step));
+  window.localStorage.setItem("pronoteconnect-step", String(currentStep));
+  if (currentStatus) updateSteps(currentStatus);
+  document.querySelector(`[data-setup-step="${currentStep}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function initializeStepNavigation() {
+  document.querySelectorAll("[data-setup-step]").forEach((card) => {
+    const step = Number(card.dataset.setupStep);
+    const actions = document.createElement("div");
+    actions.className = "step-actions";
+    if (step > 1) {
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "button button-quiet";
+      back.textContent = "retour";
+      back.addEventListener("click", () => showStep(step - 1));
+      actions.append(back);
+    } else {
+      actions.append(document.createElement("span"));
+    }
+    if (step < 4) {
+      const next = document.createElement("button");
+      next.type = "button";
+      next.className = "button button-quiet step-skip";
+      next.dataset.stepNext = String(step);
+      next.textContent = "passer quand même";
+      next.addEventListener("click", () => showStep(step + 1));
+      actions.append(next);
+    }
+    card.querySelector(".step-content")?.append(actions);
+  });
+  document.querySelectorAll(".steps li").forEach((marker, index) => {
+    marker.tabIndex = 0;
+    marker.setAttribute("role", "button");
+    marker.addEventListener("click", () => showStep(index + 1));
+    marker.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") showStep(index + 1);
+    });
+  });
+}
+
+async function checkUpdate() {
+  try {
+    const update = await api("/api/update");
+    if (!update.available || !update.releaseUrl) return;
+    updateUrl = update.releaseUrl;
+    byId("update-message").textContent = `Version ${update.latestVersion}. Votre accord sera demandé avant d’ouvrir son installation.`;
+    toggle("update-notice", true);
+  } catch {
+  }
 }
 
 function renderStatus(status) {
@@ -188,14 +260,20 @@ async function copy(value) {
 }
 
 async function initialize() {
+  initializeStepNavigation();
   const bootstrap = await api("/api/bootstrap");
   csrf = bootstrap.csrf;
   if (bootstrap.mode === "fake") notice("Mode de démonstration avec des données anonymes.");
   await refreshStatus();
+  void checkUpdate();
   pollHandle = window.setInterval(refreshStatus, 3_000);
 }
 
 byId("refresh-status").addEventListener("click", refreshStatus);
+byId("open-update").addEventListener("click", () => {
+  if (!updateUrl || !window.confirm("Ouvrir la mise à jour PronoteConnect ? Rien ne sera installé sans votre action.")) return;
+  window.open(updateUrl, "_blank", "noopener,noreferrer");
+});
 byId("copy-plugin-name").addEventListener("click", () => void copy("PronoteConnect"));
 byId("copy-tunnel").addEventListener("click", () => {
   if (currentStatus?.tunnel.tunnelId) void copy(currentStatus.tunnel.tunnelId);

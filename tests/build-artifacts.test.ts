@@ -17,6 +17,8 @@ describe("installation", () => {
     const windowsLauncher = await readFile("installer.cmd", "utf8");
     const windowsService = await readFile("scripts/windows-service.cjs", "utf8");
     const browserCheck = await readFile("scripts/check-browser.mjs", "utf8");
+    const interfacePage = await readFile("public/index.html", "utf8");
+    const interfaceScript = await readFile("public/app.js", "utf8");
     const tunnelInstaller = await readFile("scripts/install-tunnel-client.mjs", "utf8");
     expect(installer).toContain("pronoteconnect.service");
     expect(installer).toContain("systemctl --user enable pronoteconnect.service");
@@ -41,6 +43,9 @@ describe("installation", () => {
     expect(windowsService).toContain("windowsHide: true");
     expect(windowsService).toContain("PLAYWRIGHT_BROWSERS_PATH");
     expect(browserCheck).toContain("chromium.launch({ headless: true })");
+    expect(interfacePage.match(/data-setup-step=/gu)).toHaveLength(4);
+    expect(interfaceScript).toContain("passer quand même");
+    expect(interfaceScript).toContain("pronoteconnect-step");
     expect(tunnelInstaller).toContain("openai/tunnel-client/releases/latest");
     const installationSources = `${installer}\n${windowsInstaller}\n${windowsLauncher}\n${windowsService}\n${tunnelInstaller}`;
     expect(installationSources).not.toMatch(/sk-[A-Za-z0-9]{16,}/u);

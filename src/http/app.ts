@@ -10,6 +10,7 @@ import type { Runtime } from "../runtime.js";
 import { createPronoteMcpServer } from "../mcp/server.js";
 import { APP_NAME, APP_VERSION } from "../config.js";
 import { detectChromiumExecutable } from "../auth/browser-auth-provider.js";
+import { checkForUpdate } from "../update/checker.js";
 
 function cookies(request: Request): Record<string, string> {
   return Object.fromEntries(
@@ -114,6 +115,11 @@ export function createHttpApp(runtime: Runtime) {
       mode: runtime.config.adapter,
       complete: connection.connected && tunnel.active && tunnel.pluginConfigured,
     });
+  });
+
+  app.get("/api/update", async (_request, response) => {
+    response.setHeader("Cache-Control", "no-store");
+    response.json(await checkForUpdate());
   });
 
   app.post("/api/tunnel/configure", requireCsrf, async (request, response) => {

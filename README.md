@@ -108,7 +108,7 @@ L’installateur crée un service systemd utilisateur, l’active au démarrage 
 
 ## Configuration guidée
 
-Après l’installation, ouvrez <http://127.0.0.1:37421>. La page affiche quatre étapes et vérifie automatiquement leur état.
+Après l’installation, ouvrez <http://127.0.0.1:37421>. La page affiche une seule étape à la fois et vérifie automatiquement son état. Le bouton **continuer** apparaît lorsque l’étape est terminée. Le petit bouton **passer quand même** permet d’avancer sans la terminer. La barre de progression permet de revenir à n’importe quelle étape.
 
 ### 1. Vérifier l’application
 
@@ -183,6 +183,8 @@ PronoteConnect n’utilise ni Tailscale Serve ni Tailscale Funnel. Le tunnel Ope
 N’activez cet accès que sur un tailnet personnel ou composé d’appareils de confiance.
 
 ## Mise à jour
+
+PronoteConnect vérifie au maximum toutes les six heures si une nouvelle version stable est publiée sur ce dépôt GitHub. Une notification apparaît dans l’interface, mais rien n’est installé sans confirmation de l’utilisateur. Le bouton ouvre uniquement la publication officielle correspondante.
 
 Avec Git sous Linux :
 
@@ -316,5 +318,9 @@ Les huit outils MCP sont :
 - `pronote_read_attachment`.
 
 Le projet utilise TypeScript, Node.js 22, `@modelcontextprotocol/sdk`, Zod, Playwright et `@blockshub/pawnote-lts`. Il est distribué sous licence `GPL-3.0-or-later` et n’est affilié ni à Index Éducation, ni à EduConnect, ni à Papillon.
+
+## Crédit et réutilisation
+
+Copyright © 2026 sairo-cyber. Le projet peut être utilisé, étudié, modifié et redistribué en conservant le crédit, la licence et les obligations de partage du code source prévues par la GPL. Cette licence est nécessaire parce que Pawnote-LTS, utilisé par PronoteConnect, est lui-même distribué sous GPL-3.0-or-later.
 
 Documentation officielle : [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels), [création des plugins](https://developers.openai.com/plugins/build/plugins), [authentification](https://developers.openai.com/plugins/build/auth) et [plugins ChatGPT](https://learn.chatgpt.com/fr-FR/docs/plugins).

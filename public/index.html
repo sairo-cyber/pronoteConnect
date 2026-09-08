@@ -21,6 +21,10 @@
 
     <main>
       <div id="notice" class="notice hidden" role="status"></div>
+      <aside id="update-notice" class="update-notice hidden" aria-live="polite">
+        <div><strong>Une mise à jour est disponible</strong><p id="update-message"></p></div>
+        <button id="open-update" class="button button-secondary" type="button">voir la mise à jour</button>
+      </aside>
 
       <section class="card summary" aria-labelledby="summary-title">
         <div class="card-title">
@@ -42,7 +46,7 @@
         <li id="step-marker-4"><span>4</span>pronote</li>
       </ol>
 
-      <section class="card setup-card" aria-labelledby="install-title">
+      <section class="card setup-card" data-setup-step="1" aria-labelledby="install-title">
         <div class="step-number">1</div>
         <div class="step-content">
           <div class="card-title"><div><p class="eyebrow">application</p><h2 id="install-title">Vérifier l’installation</h2></div><span id="install-badge" class="badge">chargement</span></div>
@@ -56,7 +60,7 @@
         </div>
       </section>
 
-      <section class="card setup-card" aria-labelledby="tunnel-title">
+      <section class="card setup-card" data-setup-step="2" aria-labelledby="tunnel-title">
         <div class="step-number">2</div>
         <div class="step-content">
           <div class="card-title"><div><p class="eyebrow">openai platform</p><h2 id="tunnel-title">Créer le tunnel privé</h2></div><span id="tunnel-badge" class="badge">à configurer</span></div>
@@ -83,7 +87,7 @@
         </div>
       </section>
 
-      <section class="card setup-card" aria-labelledby="plugin-title">
+      <section class="card setup-card" data-setup-step="3" aria-labelledby="plugin-title">
         <div class="step-number">3</div>
         <div class="step-content">
           <div class="card-title"><div><p class="eyebrow">chatgpt</p><h2 id="plugin-title">Créer votre plugin personnel</h2></div><span id="plugin-badge" class="badge">à configurer</span></div>
@@ -111,7 +115,7 @@
         </div>
       </section>
 
-      <section class="card setup-card" aria-labelledby="pronote-title">
+      <section class="card setup-card" data-setup-step="4" aria-labelledby="pronote-title">
         <div class="step-number">4</div>
         <div class="step-content">
           <div class="card-title"><div><p class="eyebrow">compte scolaire</p><h2 id="pronote-title">Connecter PRONOTE</h2></div><span id="pronote-badge" class="badge">à connecter</span></div>
