@@ -98,15 +98,11 @@ escaped_node="$(escape_unit "${node_command}")"
 escaped_data="$(escape_unit "${data_dir}")"
 escaped_tunnel="$(escape_unit "${runtime_dir}/tunnel-client/tunnel-client")"
 escaped_working_dir="${escaped_root// /\\x20}"
-allowed_hosts="127.0.0.1,localhost,[::1]"
+tailscale_host=""
 if command -v tailscale >/dev/null 2>&1; then
-  while IFS= read -r tailscale_ip; do
-    [[ -n "${tailscale_ip}" ]] && allowed_hosts="${allowed_hosts},${tailscale_ip}"
-  done < <(tailscale ip -4 2>/dev/null || true)
-  tailscale_dns="$(tailscale status --json 2>/dev/null | "${node_command}" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=JSON.parse(s);process.stdout.write((v.Self?.DNSName||"").replace(/\.$/,""))}catch{}})' || true)"
-  [[ -n "${tailscale_dns}" ]] && allowed_hosts="${allowed_hosts},${tailscale_dns}"
+  tailscale_host="$(tailscale ip -4 2>/dev/null | head -n 1 || true)"
 fi
-escaped_allowed_hosts="$(escape_unit "${allowed_hosts}")"
+escaped_tailscale_host="$(escape_unit "${tailscale_host}")"
 
 tmp_service="$(mktemp)"
 printf '%s\n' \
@@ -122,7 +118,7 @@ printf '%s\n' \
   "Environment=\"PRONOTECONNECT_DATA_DIR=${escaped_data}\"" \
   "Environment=\"PRONOTECONNECT_INSTALL_DIR=${escaped_root}\"" \
   "Environment=\"PRONOTECONNECT_TUNNEL_CLIENT=${escaped_tunnel}\"" \
-  "Environment=\"PRONOTECONNECT_ALLOWED_HOSTS=${escaped_allowed_hosts}\"" \
+  "Environment=\"PRONOTECONNECT_TAILSCALE_HOST=${escaped_tailscale_host}\"" \
   'Environment="PRONOTECONNECT_MANAGED_SERVICE=1"' \
   'Restart=on-failure' \
   'RestartSec=3' \

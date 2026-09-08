@@ -105,6 +105,7 @@ export function createHttpApp(runtime: Runtime) {
         platform: process.platform,
         managedService: runtime.config.managedService,
         browser: { available: browser.available, name: browser.name },
+        tailscaleUrl: runtime.config.tailscaleHost ? `http://${runtime.config.tailscaleHost}:${runtime.config.port}` : undefined,
       },
       connection,
       auth: runtime.auth?.status() ?? { phase: "idle", message: "Mode de démonstration factice.", pinRequired: false },

@@ -9,14 +9,27 @@ if (!["127.0.0.1", "localhost", "::1"].includes(config.host) && process.env.PRON
 }
 const runtime = await createRuntime(config);
 const app = createHttpApp(runtime);
-const server = createServer(app);
+const servers = [createServer(app)];
 
 await new Promise<void>((resolve, reject) => {
-  server.once("error", reject);
-  server.listen(config.port, config.host, () => resolve());
+  servers[0]?.once("error", reject);
+  servers[0]?.listen(config.port, config.host, () => resolve());
 });
+if (config.tailscaleHost) {
+  const tailscaleServer = createServer(app);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      tailscaleServer.once("error", reject);
+      tailscaleServer.listen(config.port, config.tailscaleHost, () => resolve());
+    });
+    servers.push(tailscaleServer);
+  } catch {
+    runtime.logger.warn("L'adresse Tailscale n'est pas disponible. L'interface reste accessible localement.");
+  }
+}
 runtime.logger.info("PronoteConnect démarré.", {
   interface: `http://${config.host}:${config.port}`,
+  tailscale: config.tailscaleHost ? `http://${config.tailscaleHost}:${config.port}` : undefined,
   mcp: `http://${config.host}:${config.port}/mcp`,
   adapter: config.adapter,
 });
@@ -27,7 +40,7 @@ async function stop(): Promise<void> {
   stopping = true;
   await runtime.auth?.cancel();
   await runtime.tunnel?.stop();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await Promise.all(servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 }
 process.once("SIGINT", () => { void stop().finally(() => process.exit(0)); });
 process.once("SIGTERM", () => { void stop().finally(() => process.exit(0)); });
